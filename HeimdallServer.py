@@ -9,12 +9,14 @@
 import socket
 import sys
 import logging
+from time import sleep
 
-PASSCODE_SIZE = 4
-HARDCODED_PASSWORD = b"1234"
+PASSCODE_SIZE = 8
+HARDCODED_PASSWORD = b"01230123"
 MSG_SUCCESS = b"SUCCESS"
 MSG_FAIL    = b"FAIL"
 SERVER_PORT = ("", 1333)
+REPLY_WAIT  = 1 #Wait time before reply 
 
 logging.basicConfig(stream=sys.stdout, level=logging.DEBUG, format='[%(asctime)s] [%(levelname)s] : %(message)s')
 
@@ -32,9 +34,13 @@ while True:
         if not passcode: break
         if (passcode == HARDCODED_PASSWORD):
             logging.debug("Passcode matches! Grant access.")
+            # Apparently if we reply too fast, the ESP8266 ignores it
+            sleep(REPLY_WAIT)
             sock.sendto(MSG_SUCCESS, addr);
         else:
             logging.debug("Passcode does not match. DENY access.")
+            # See ESP8266 comment
+            sleep(REPLY_WAIT)
             sock.sendto(MSG_FAIL, addr);
         sock.close()
 
