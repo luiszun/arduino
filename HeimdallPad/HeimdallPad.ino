@@ -4,9 +4,9 @@
 #define PIN_LEN 8
 
 #define BLUE_BUTTON    13
-#define RED_BUTTON     9
-#define GREEN_BUTTON  10
-#define YELLOW_BUTTON 11
+#define RED_BUTTON     11
+#define GREEN_BUTTON   10
+#define YELLOW_BUTTON   9
 
 #define YELLOW_LED 7
 #define GREEN_LED  6
