@@ -16,7 +16,7 @@
 
 /*************************************************************************************************
   Change IP addresses and lengths in the defines
-  AT+CIPSEND=1,8\r\n" (8 bytes send, pin len)
+  "AT+CIPSEND=1,8\r\n" (8 bytes send, pin len)
   "+IPD,1,7:SUCCESS"  (7 chars of SUCCESS word)
   "AT+CIPSTART=0,\"UDP\",\"0\",1333\r\n"                 (Listen on 1333)
   "AT+CIPSTART=1,\"UDP\",\"192.168.1.90\",1333,1333\r\n" (Server IP, listen and send to 1333)
@@ -33,10 +33,10 @@
 /****************************************************************************
    TODO: Remove hardcoded strings. Craft the strings given a set of values
    Check for failures on ESP related things
-   Implement brand new ESP config (Connect to wifi)
+   Implement timeouts for ESP communication
  ***************************************************************************/
  
-SoftwareSerial ESPserial(2, 3); // RX | TX
+SoftwareSerial ESPserial(A5, A4); // RX | TX
 
 bool          should_read[PINS];
 unsigned char current_state[PINS];
