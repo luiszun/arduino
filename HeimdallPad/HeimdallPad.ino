@@ -12,6 +12,8 @@
 #define GREEN_LED  6
 #define RED_LED    5
 
+#define ESP_SWITCH 8
+
 /*************************************************************************************************
   Change IP addresses and lengths in the defines
   AT+CIPSEND=1,8\r\n" (8 bytes send, pin len)
@@ -26,6 +28,7 @@
 #define ESP_MUX       "AT+CIPMUX=1\r\n"
 #define UDP_LISTEN    "AT+CIPSTART=0,\"UDP\",\"0\",1333\r\n"
 #define UDP_CHANNEL   "AT+CIPSTART=1,\"UDP\",\"192.168.1.90\",1333,1333\r\n"
+#define ESP01_BOOT_MS 375 // Got this number experimentally
 
 /****************************************************************************
    TODO: Remove hardcoded strings. Craft the strings given a set of values
@@ -65,6 +68,7 @@ void esp_listen(String * output) {
   }
 
   *output = ESPserial.readString();
+  Serial.write(output->c_str());
 }
 
 void esp_sendcmd(char * command, String * output) {
@@ -88,8 +92,17 @@ void post_data() {
   if (retval.indexOf(RECV_SUCCESS) != -1) blink_led(GREEN_LED, 1, 1000);
   else                                    blink_led(RED_LED,   1, 1000);
 
+  digitalWrite(ESP_SWITCH,  LOW);
 }
 
+void turn_transceiver_on() {
+  String result;
+  digitalWrite(ESP_SWITCH,  HIGH);
+  delay(ESP01_BOOT_MS);
+  esp_sendcmd(ESP_MUX, &result);
+  esp_sendcmd(UDP_LISTEN, &result);
+  esp_sendcmd(UDP_CHANNEL, &result);
+}
 
 void setup() {
   String result;
@@ -102,6 +115,10 @@ void setup() {
   pinMode(RED_LED,    OUTPUT);
   pinMode(GREEN_LED,  OUTPUT);
 
+  pinMode(ESP_SWITCH,  OUTPUT);
+
+  digitalWrite(ESP_SWITCH,  HIGH);
+  
   // Inverse logic - turn off the leds
   digitalWrite(YELLOW_LED, HIGH);
   digitalWrite(RED_LED,    HIGH);
@@ -117,10 +134,11 @@ void setup() {
   pin_buffer[PIN_LEN + 2] = '\n';
   pin_buffer[PIN_LEN + 3] = 0;
 
-  esp_sendcmd(ESP_MUX, &result);
-  esp_sendcmd(UDP_LISTEN, &result);
-  esp_sendcmd(UDP_CHANNEL, &result);
-  blink_led(GREEN_LED, 1.0, 1000);
+  turn_transceiver_on();
+  blink_led(RED_LED,    1.0, 333);
+  blink_led(YELLOW_LED, 1.0, 333);
+  blink_led(GREEN_LED,  1.0, 333);
+  digitalWrite(ESP_SWITCH,  LOW);
 }
 
 void loop() {
@@ -133,6 +151,8 @@ void loop() {
     }
     if (digitalRead(input_pins[input]) == HIGH) {
       if (should_read[input_pins[input]]) {
+        // Turn on the transceiver on the first keystroke
+        if ( ! buffer_index) turn_transceiver_on();
         should_read[input_pins[input]] = false;
         pin_buffer[buffer_index++] = (input + '0');
       }
