@@ -13,6 +13,7 @@
 #define RED_LED    5
 
 #define ESP_SWITCH 8
+#define KEYPAD_INTERRUPT_PIN 2
 
 /*************************************************************************************************
   Change IP addresses and lengths in the defines
@@ -33,19 +34,18 @@
 /****************************************************************************
    TODO: Remove hardcoded strings. Craft the strings given a set of values
    Check for failures on ESP related things
-   Implement timeouts for ESP communication
+   Implement timeouts for ESP communicationi
+   Implement keypad timeouts (Curious kids turning on the transceiver? maybe elfs?)
  ***************************************************************************/
  
 SoftwareSerial ESPserial(A5, A4); // RX | TX
 
-bool          should_read[PINS];
 unsigned char current_state[PINS];
 unsigned char input_pins[] = {YELLOW_BUTTON, GREEN_BUTTON, RED_BUTTON, BLUE_BUTTON};
-char pin_buffer[PIN_LEN + 3];
+volatile char pin_buffer[PIN_LEN + 3];
+volatile bool should_init_transceiver = false;
+volatile int  buffer_index = 0;
 
-bool isconnected = false;
-
-int buffer_index = 0;
 
 // ratio_on is defined as a 0 - 1 time frame. 0.5 being 50%
 void blink_led(int led, float ratio_on, int millisec, int loops = 1) {
@@ -84,7 +84,7 @@ void post_data() {
   char   cmd[]      = SEND_SIZE;
 
   esp_sendcmd(cmd, &retval);
-  esp_sendcmd(pin_buffer, &retval);
+  esp_sendcmd((char*)pin_buffer, &retval);
 
   while (retval.indexOf("+IPD") == -1)
     esp_listen(&retval);
@@ -104,19 +104,38 @@ void turn_transceiver_on() {
   esp_sendcmd(UDP_CHANNEL, &result);
 }
 
+void capture_keystrokes() {
+
+  // Never overflow the pin data
+  if (buffer_index == PIN_LEN) return;
+  
+  int input = 0;
+  digitalWrite(GREEN_LED, LOW);
+  if ( ! buffer_index ) should_init_transceiver = true;
+
+  for (; input < 4; ++input ) {
+    if (digitalRead(input_pins[input]) == HIGH) {
+      pin_buffer[buffer_index] = (input + '0');
+      ++buffer_index;
+    }
+  }
+  digitalWrite(GREEN_LED, HIGH);
+}
+
 void setup() {
   String result;
   pinMode(RED_BUTTON,    INPUT);
   pinMode(GREEN_BUTTON,  INPUT);
   pinMode(BLUE_BUTTON,   INPUT);
   pinMode(YELLOW_BUTTON, INPUT);
+  pinMode(KEYPAD_INTERRUPT_PIN, INPUT);
 
   pinMode(YELLOW_LED, OUTPUT);
   pinMode(RED_LED,    OUTPUT);
   pinMode(GREEN_LED,  OUTPUT);
 
   pinMode(ESP_SWITCH,  OUTPUT);
-
+  
   digitalWrite(ESP_SWITCH,  HIGH);
   
   // Inverse logic - turn off the leds
@@ -124,7 +143,6 @@ void setup() {
   digitalWrite(RED_LED,    HIGH);
   digitalWrite(GREEN_LED,  HIGH);
 
-  memset(should_read, true, sizeof(should_read));
   memset(current_state, 0, sizeof(current_state));
 
   Serial.begin(ESP_FREQ);
@@ -135,31 +153,27 @@ void setup() {
   pin_buffer[PIN_LEN + 3] = 0;
 
   turn_transceiver_on();
+  
   blink_led(RED_LED,    1.0, 333);
   blink_led(YELLOW_LED, 1.0, 333);
   blink_led(GREEN_LED,  1.0, 333);
   digitalWrite(ESP_SWITCH,  LOW);
+  attachInterrupt(digitalPinToInterrupt(KEYPAD_INTERRUPT_PIN),
+                  capture_keystrokes,
+                  RISING);
 }
 
 void loop() {
-  int input;
+  if (buffer_index == PIN_LEN) {
+    buffer_index = 0;
+    // disable
+    post_data();
+    // enable
+  }
 
-  for ( input = 0; input < 4; ++input ) {
-    if (buffer_index == PIN_LEN) {
-      buffer_index = 0;
-      post_data();
-    }
-    if (digitalRead(input_pins[input]) == HIGH) {
-      if (should_read[input_pins[input]]) {
-        // Turn on the transceiver on the first keystroke
-        if ( ! buffer_index) turn_transceiver_on();
-        should_read[input_pins[input]] = false;
-        pin_buffer[buffer_index++] = (input + '0');
-      }
-    }
-    else if ( ! should_read[input_pins[input]]) {
-      should_read[input_pins[input]] = true;
-    }
+  if (should_init_transceiver) {
+    turn_transceiver_on();
+    should_init_transceiver = false;
   }
 
   if (ESPserial.available()) Serial.write(ESPserial.read());
