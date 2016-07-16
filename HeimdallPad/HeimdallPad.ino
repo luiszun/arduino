@@ -14,8 +14,12 @@
 
 #define ESP_SWITCH 8
 #define KEYPAD_INTERRUPT_PIN 2
+#define BUZZER_PIN   A3
+#define ESPSERIAL_RX A5
+#define ESPSERIAL_TX A4
+
 #define NUMBER_OF_BUTTONS 4
-#define MILLIS_DELTA 150
+#define MILLIS_DELTA 175
 
 /*************************************************************************************************
   Change IP addresses and lengths in the defines
@@ -31,7 +35,7 @@
 #define ESP_MUX       "AT+CIPMUX=1\r\n"
 #define UDP_LISTEN    "AT+CIPSTART=0,\"UDP\",\"0\",1333\r\n"
 #define UDP_CHANNEL   "AT+CIPSTART=1,\"UDP\",\"192.168.1.90\",1333,1333\r\n"
-#define ESP01_BOOT_MS 375 // Got this number experimentally
+#define ESP01_BOOT_MS 450 // Got this number experimentally
 
 /****************************************************************************
    TODO: Remove hardcoded strings. Craft the strings given a set of values
@@ -41,14 +45,14 @@
    Clean buffer on send
  ***************************************************************************/
  
-SoftwareSerial ESPserial(A5, A4); // RX | TX
+SoftwareSerial ESPserial(ESPSERIAL_RX, ESPSERIAL_TX);
 
 unsigned char current_state[PINS];
 unsigned char input_pins[] = {YELLOW_BUTTON, GREEN_BUTTON, RED_BUTTON, BLUE_BUTTON};
 volatile char pin_buffer[PIN_LEN + 3];
 volatile bool should_init_transceiver = false;
 volatile int  buffer_index = 0;
-volatile unsigned long last_millis = 0; 
+volatile unsigned long last_millis = 0L;
 
 // ratio_on is defined as a 0 - 1 time frame. 0.5 being 50%
 void blink_led(int led, float ratio_on, int millisec, int loops = 1) {
@@ -116,18 +120,25 @@ void capture_keystrokes() {
   if (buffer_index == PIN_LEN) return;
   
   int input = 0;
-  digitalWrite(GREEN_LED, LOW);
-
   for (; input < NUMBER_OF_BUTTONS; ++input ) {
     if (digitalRead(input_pins[input]) == LOW) {
       // Move this here. Avoid turning on the transceiver on the boot time random pins
       if ( ! buffer_index ) should_init_transceiver = true;
       pin_buffer[buffer_index] = (input + '0');
       ++buffer_index;
-      
+      digitalWrite(BUZZER_PIN, HIGH);
     }
   }
-  digitalWrite(GREEN_LED, HIGH);
+  attachInterrupt(digitalPinToInterrupt(KEYPAD_INTERRUPT_PIN),
+                  buzzer_off,
+                  RISING);
+}
+
+void buzzer_off() {
+  digitalWrite(BUZZER_PIN, LOW);
+  attachInterrupt(digitalPinToInterrupt(KEYPAD_INTERRUPT_PIN),
+                  capture_keystrokes,
+                  FALLING);
 }
 
 void setup() {
@@ -143,6 +154,7 @@ void setup() {
   pinMode(GREEN_LED,  OUTPUT);
 
   pinMode(ESP_SWITCH,  OUTPUT);
+  pinMode(BUZZER_PIN, OUTPUT);
   
   digitalWrite(ESP_SWITCH,  HIGH);
   
@@ -160,7 +172,7 @@ void setup() {
   pin_buffer[PIN_LEN + 2] = '\n';
   pin_buffer[PIN_LEN + 3] = 0;
 
-  // DEBUG turn_transceiver_on();
+  //DEBUG  turn_transceiver_on();
   
   blink_led(RED_LED,    1.0, 333);
   blink_led(YELLOW_LED, 1.0, 333);
@@ -173,15 +185,15 @@ void setup() {
                   FALLING);
 }
 
-void loop() {
+void loop() {  
   if (buffer_index == PIN_LEN) {
     buffer_index = 0;
     post_data();
   }
 
   if (should_init_transceiver) {
-    turn_transceiver_on();
     should_init_transceiver = false;
+    turn_transceiver_on();
   }
 
   if (ESPserial.available()) Serial.write(ESPserial.read());
