@@ -14,7 +14,6 @@
 
 #define ESP_SWITCH 8
 #define KEYPAD_INTERRUPT_PIN 2
-#define BUZZER_PIN   A3
 #define ESPSERIAL_RX A5
 #define ESPSERIAL_TX A4
 
@@ -120,25 +119,17 @@ void capture_keystrokes() {
   if (buffer_index == PIN_LEN) return;
   
   int input = 0;
+  digitalWrite(GREEN_LED, LOW);
+
   for (; input < NUMBER_OF_BUTTONS; ++input ) {
     if (digitalRead(input_pins[input]) == LOW) {
       // Move this here. Avoid turning on the transceiver on the boot time random pins
       if ( ! buffer_index ) should_init_transceiver = true;
       pin_buffer[buffer_index] = (input + '0');
       ++buffer_index;
-      digitalWrite(BUZZER_PIN, HIGH);
     }
   }
-  attachInterrupt(digitalPinToInterrupt(KEYPAD_INTERRUPT_PIN),
-                  buzzer_off,
-                  RISING);
-}
-
-void buzzer_off() {
-  digitalWrite(BUZZER_PIN, LOW);
-  attachInterrupt(digitalPinToInterrupt(KEYPAD_INTERRUPT_PIN),
-                  capture_keystrokes,
-                  FALLING);
+  digitalWrite(GREEN_LED, HIGH);
 }
 
 void setup() {
@@ -154,7 +145,6 @@ void setup() {
   pinMode(GREEN_LED,  OUTPUT);
 
   pinMode(ESP_SWITCH,  OUTPUT);
-  pinMode(BUZZER_PIN, OUTPUT);
   
   digitalWrite(ESP_SWITCH,  HIGH);
   
@@ -185,7 +175,7 @@ void setup() {
                   FALLING);
 }
 
-void loop() {  
+void loop() {
   if (buffer_index == PIN_LEN) {
     buffer_index = 0;
     post_data();
