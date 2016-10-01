@@ -9,10 +9,13 @@
 import socket
 import sys
 import logging
+
 from time import sleep
 
 PASSCODE_SIZE = 8
 HARDCODED_PASSWORD = b"01230123"
+LOCK_DOOR_CODE     = b"LOCK"
+
 MSG_SUCCESS = b"SUCCESS"
 MSG_FAIL    = b"FAIL"
 SERVER_PORT = ("", 1333)
@@ -35,6 +38,10 @@ while True:
         if (passcode == HARDCODED_PASSWORD):
             logging.debug("Passcode matches! Grant access.")
             # Apparently if we reply too fast, the ESP8266 ignores it
+            sleep(REPLY_WAIT)
+            sock.sendto(MSG_SUCCESS, addr);
+        elif (passcode == LOCK_DOOR_CODE):
+            logging.debug("Got a lock message. Send ACK.")
             sleep(REPLY_WAIT)
             sock.sendto(MSG_SUCCESS, addr);
         else:
