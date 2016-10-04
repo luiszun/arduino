@@ -15,9 +15,10 @@
 #define ESP_SWITCH 8
 #define KEYPAD_INTERRUPT_PIN 2
 
-#define KEYPRESS_OUTPUT A3
 #define ESPSERIAL_RX    A5
 #define ESPSERIAL_TX    A4
+#define KEYPRESS_OUTPUT A3
+#define CLOSE_BUTTON    A2
 
 #define NUMBER_OF_BUTTONS 4
 #define MILLIS_DELTA 200
@@ -32,6 +33,7 @@
 
 #define ESP_FREQ       9600
 #define SEND_SIZE     "AT+CIPSEND=1,8\r\n"
+#define SEND_LOCK     "AT+CIPSEND=1,4\r\n"
 #define RECV_SUCCESS  "+IPD,1,7:SUCCESS"
 #define ESP_MUX       "AT+CIPMUX=1\r\n"
 #define UDP_LISTEN    "AT+CIPSTART=0,\"UDP\",\"0\",1333\r\n"
@@ -44,6 +46,8 @@
    Implement timeouts for ESP communicationi
    Implement keypad timeouts (Curious kids turning on the transceiver? maybe elfs?)
    Clean buffer on send
+   Clean duplicate code for sending code and posting lock
+   Receive ack from the locker before sending ack to the pad on lock command
  ***************************************************************************/
  
 SoftwareSerial ESPserial(ESPSERIAL_RX, ESPSERIAL_TX);
@@ -52,6 +56,7 @@ unsigned char current_state[PINS];
 unsigned char input_pins[] = {YELLOW_BUTTON, GREEN_BUTTON, RED_BUTTON, BLUE_BUTTON};
 volatile char pin_buffer[PIN_LEN + 3];
 volatile bool should_init_transceiver = false;
+volatile bool should_lock = false;
 volatile int  buffer_index = 0;
 volatile unsigned long last_millis = 0L;
 
@@ -103,6 +108,24 @@ void post_data() {
   digitalWrite(ESP_SWITCH,  LOW);
 }
 
+void post_lock() {
+  turn_transceiver_on();
+
+  String retval;
+  char   cmd[]      = SEND_LOCK;
+
+  esp_sendcmd(cmd, &retval);
+  esp_sendcmd("LOCK", &retval);
+
+  while (retval.indexOf("+IPD") == -1)
+    esp_listen(&retval);
+
+  if (retval.indexOf(RECV_SUCCESS) != -1) blink_led(GREEN_LED, 1, 1000);
+  else                                    blink_led(RED_LED,   1, 1000);
+
+  digitalWrite(ESP_SWITCH,  LOW);
+}
+
 void turn_transceiver_on() {
   String result;
   digitalWrite(ESP_SWITCH,  HIGH);
@@ -122,6 +145,13 @@ void capture_keystrokes() {
   
   int input = 0;
 
+  if (digitalRead(CLOSE_BUTTON) == LOW) {
+    digitalWrite(KEYPRESS_OUTPUT, LOW);
+    should_lock = true;
+    digitalWrite(KEYPRESS_OUTPUT, HIGH);
+    return;
+  }
+  
   for (; input < NUMBER_OF_BUTTONS; ++input ) {
     if (digitalRead(input_pins[input]) == LOW) {
       digitalWrite(KEYPRESS_OUTPUT, LOW);
@@ -140,6 +170,8 @@ void setup() {
   pinMode(GREEN_BUTTON,  INPUT_PULLUP);
   pinMode(BLUE_BUTTON,   INPUT_PULLUP);
   pinMode(YELLOW_BUTTON, INPUT_PULLUP);
+  pinMode(CLOSE_BUTTON,  INPUT_PULLUP);
+  
   pinMode(KEYPAD_INTERRUPT_PIN, INPUT_PULLUP);
   pinMode(KEYPRESS_OUTPUT, OUTPUT);
 
@@ -186,6 +218,10 @@ void loop() {
   if (should_init_transceiver) {
     should_init_transceiver = false;
     turn_transceiver_on();
+  }
+  else if (should_lock) {
+    should_lock = false;
+    post_lock();
   }
 
   if (ESPserial.available()) Serial.write(ESPserial.read());

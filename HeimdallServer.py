@@ -5,6 +5,7 @@
 #       Send replies to Locker
 #       Sing Locker messages with a private key
 #       Save persistent logs
+#       Receive ack from the locker before sending ack to the pad on lock command
 
 import socket
 import sys
