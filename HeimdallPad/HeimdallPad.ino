@@ -14,11 +14,13 @@
 
 #define ESP_SWITCH 8
 #define KEYPAD_INTERRUPT_PIN 2
-#define ESPSERIAL_RX A5
-#define ESPSERIAL_TX A4
+
+#define KEYPRESS_OUTPUT A3
+#define ESPSERIAL_RX    A5
+#define ESPSERIAL_TX    A4
 
 #define NUMBER_OF_BUTTONS 4
-#define MILLIS_DELTA 175
+#define MILLIS_DELTA 200
 
 /*************************************************************************************************
   Change IP addresses and lengths in the defines
@@ -119,17 +121,17 @@ void capture_keystrokes() {
   if (buffer_index == PIN_LEN) return;
   
   int input = 0;
-  digitalWrite(GREEN_LED, LOW);
 
   for (; input < NUMBER_OF_BUTTONS; ++input ) {
     if (digitalRead(input_pins[input]) == LOW) {
+      digitalWrite(KEYPRESS_OUTPUT, LOW);
       // Move this here. Avoid turning on the transceiver on the boot time random pins
       if ( ! buffer_index ) should_init_transceiver = true;
       pin_buffer[buffer_index] = (input + '0');
       ++buffer_index;
     }
   }
-  digitalWrite(GREEN_LED, HIGH);
+  digitalWrite(KEYPRESS_OUTPUT, HIGH);
 }
 
 void setup() {
@@ -139,6 +141,7 @@ void setup() {
   pinMode(BLUE_BUTTON,   INPUT_PULLUP);
   pinMode(YELLOW_BUTTON, INPUT_PULLUP);
   pinMode(KEYPAD_INTERRUPT_PIN, INPUT_PULLUP);
+  pinMode(KEYPRESS_OUTPUT, OUTPUT);
 
   pinMode(YELLOW_LED, OUTPUT);
   pinMode(RED_LED,    OUTPUT);
@@ -152,6 +155,7 @@ void setup() {
   digitalWrite(YELLOW_LED, HIGH);
   digitalWrite(RED_LED,    HIGH);
   digitalWrite(GREEN_LED,  HIGH);
+  digitalWrite(KEYPRESS_OUTPUT,  HIGH);
 
   memset(current_state, 0, sizeof(current_state));
 
@@ -161,8 +165,6 @@ void setup() {
   pin_buffer[PIN_LEN + 1] = '\r';
   pin_buffer[PIN_LEN + 2] = '\n';
   pin_buffer[PIN_LEN + 3] = 0;
-
-  //DEBUG  turn_transceiver_on();
   
   blink_led(RED_LED,    1.0, 333);
   blink_led(YELLOW_LED, 1.0, 333);
