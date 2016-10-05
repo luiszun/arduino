@@ -43,7 +43,6 @@
 /****************************************************************************
    TODO: Remove hardcoded strings. Craft the strings given a set of values
    Implement timeouts for ESP communicationi
-   Implement keypad timeouts (Curious kids turning on the transceiver? maybe elfs?)
    Clean buffer on send
  ***************************************************************************/
  
