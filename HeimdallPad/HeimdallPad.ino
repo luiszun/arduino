@@ -20,9 +20,9 @@
 #define KEYPRESS_OUTPUT A3
 #define CLOSE_BUTTON    A2
 
-#define NUMBER_OF_BUTTONS 4
-#define MILLIS_DELTA 200
-
+#define NUMBER_OF_BUTTONS     4
+#define MILLIS_DELTA          200
+#define MILLIS_POWER_TIMEOUT  5000
 /*************************************************************************************************
   Change IP addresses and lengths in the defines
   "AT+CIPSEND=1,8\r\n" (8 bytes send, pin len)
@@ -38,16 +38,13 @@
 #define ESP_MUX       "AT+CIPMUX=1\r\n"
 #define UDP_LISTEN    "AT+CIPSTART=0,\"UDP\",\"0\",1333\r\n"
 #define UDP_CHANNEL   "AT+CIPSTART=1,\"UDP\",\"192.168.1.90\",1333,1333\r\n"
-#define ESP01_BOOT_MS 450 // Got this number experimentally
+#define ESP01_BOOT_MS 550 // Got this number experimentally
 
 /****************************************************************************
    TODO: Remove hardcoded strings. Craft the strings given a set of values
-   Check for failures on ESP related things (Currently we loop on these cases)
    Implement timeouts for ESP communicationi
    Implement keypad timeouts (Curious kids turning on the transceiver? maybe elfs?)
    Clean buffer on send
-   Clean duplicate code for sending code and posting lock
-   Receive ack from the locker before sending ack to the pad on lock command
  ***************************************************************************/
  
 SoftwareSerial ESPserial(ESPSERIAL_RX, ESPSERIAL_TX);
@@ -75,47 +72,33 @@ void blink_led(int led, float ratio_on, int millisec, int loops = 1) {
   }
 }
 
-void esp_listen(String * output) {
-  while ( ! ESPserial.available()) {
+bool esp_listen(String * output) {
+  int i;
+  for (i = 0; ! ESPserial.available() && i < 5; ++i) {
     blink_led(YELLOW_LED, 0.70, 500);
   }
 
+  if (i >= 5) return false;
+  
   *output = ESPserial.readString();
   Serial.write(output->c_str());
+  return true;
 }
 
 void esp_sendcmd(char * command, String * output) {
+  // Write the command as long as we can't read a response.
+  do {
   ESPserial.write(command);
-  esp_listen(output);
+  } while ( ! esp_listen(output));
 }
 
-void post_data() {
+void post_data(char * data_size, char * buffer_data) {
   blink_led(YELLOW_LED, 0.70, 500);
 
   String retval;
-  String str_pinlen = String(PIN_LEN + 2);
-  char   cmd[]      = SEND_SIZE;
 
-  esp_sendcmd(cmd, &retval);
-  esp_sendcmd((char*)pin_buffer, &retval);
-
-  while (retval.indexOf("+IPD") == -1)
-    esp_listen(&retval);
-
-  if (retval.indexOf(RECV_SUCCESS) != -1) blink_led(GREEN_LED, 1, 1000);
-  else                                    blink_led(RED_LED,   1, 1000);
-
-  digitalWrite(ESP_SWITCH,  LOW);
-}
-
-void post_lock() {
-  turn_transceiver_on();
-
-  String retval;
-  char   cmd[]      = SEND_LOCK;
-
-  esp_sendcmd(cmd, &retval);
-  esp_sendcmd("LOCK", &retval);
+  esp_sendcmd(data_size, &retval);
+  esp_sendcmd(buffer_data, &retval);
 
   while (retval.indexOf("+IPD") == -1)
     esp_listen(&retval);
@@ -212,7 +195,14 @@ void setup() {
 void loop() {
   if (buffer_index == PIN_LEN) {
     buffer_index = 0;
-    post_data();
+    post_data(SEND_SIZE, (char*)pin_buffer);
+  }
+  else if (buffer_index != 0) {
+    // Timeout parcial inputs, we don't want to waste battery
+    if (millis() - last_millis > MILLIS_POWER_TIMEOUT) {
+      digitalWrite(ESP_SWITCH,  LOW);
+      buffer_index = 0;
+    }
   }
 
   if (should_init_transceiver) {
@@ -221,7 +211,8 @@ void loop() {
   }
   else if (should_lock) {
     should_lock = false;
-    post_lock();
+    turn_transceiver_on();
+    post_data(SEND_LOCK, "LOCK");
   }
 
   if (ESPserial.available()) Serial.write(ESPserial.read());
