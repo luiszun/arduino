@@ -1,0 +1,2 @@
+The voltage regulator I use is actually AMS1117, it was just not available on Fritzing
+The Fritzing schemas are not wired properly, schematics are useless (I don't think I want to fix this) These are intended for visual mapping only
